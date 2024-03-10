@@ -1,0 +1,13 @@
+n_class: 2
+hidden_dimension: 512
+max_length: 64
+batch_size: 16
+lr: 5e-5
+min_lr: 7.5e-6
+lr_step: 16
+gamma: 0.9996
+warmup_steps: 250
+window_length: 2048
+max_epochs: 120
+gradient_clip_val: 0.5
+verbose: False
