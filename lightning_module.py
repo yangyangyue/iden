@@ -15,11 +15,7 @@ import torch
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
-from models.mada import MadaNet
-from models.mvae import MvaeNet
-from models.vae import VaeNet
-from models.s2p import S2pNet
-from models.s2s import S2sNet
+from models.sl import SlNet
 
 class NilmNet(L.LightningModule):
     """
@@ -31,16 +27,8 @@ class NilmNet(L.LightningModule):
         super().__init__()
         self.method = method
         self.save_path = save_path
-        if method == 'mada':
-            self.model = MadaNet()
-        elif method == 'vae':
-            self.model = VaeNet()
-        elif method == 's2p':
-            self.model = S2pNet()
-        elif method == 's2s':
-            self.model = S2sNet()
-        elif method == 'mvae':
-            self.model = MvaeNet()
+        if method == 'sl':
+            self.model = SlNet()
         self.tp, self.fp, self.fn = 0, 0, 0
     
     def forward(self, ids, stamps, aggs, poses=None, clzes=None):

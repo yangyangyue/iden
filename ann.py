@@ -12,7 +12,7 @@ import numpy as np
 from dataset import read, threshs, sizes
 
 
-def annotate(set_name: str, house_id: str, app_abb: str, search_length: int = 30) -> tuple:
+def annotate(set_name, house_id, app_abb, search_length = 30):
     """
     对UKDALE总线(1s)上的事件时间戳进行标注。简而言之，首先通过预设阈值在支线上找到事件时间戳，然后在主线范围内匹配特定事件。
     对于每个事件标注总线时间戳、事件类别、事件类型和支线时间戳。事件类别指的是开启事件(1)和关闭事件(2)。事件类型匹配事件(1)和不匹配事件(2)。
@@ -29,14 +29,12 @@ def annotate(set_name: str, house_id: str, app_abb: str, search_length: int = 30
     end = np.searchsorted(apps[:, 0], mains[-1, 0])
     apps = apps[begin:end]
     records = np.zeros((0, 4), dtype=str)
-    n_type1, n_type2 = 0, 0
+    n_matched, n_unmatched = 0, 0
     # 1. 基于支线获得模糊时间戳
     stamps_over_app = get_stamps_over_load(apps, threshs[app_abb])
-    print("xx")
     for event_clz in ("1", "2"):
         thresh = threshs[app_abb]
         size = sizes[house_id][app_abb][int(event_clz)-1]
-        print("xxx")
         for stamp_over_app in stamps_over_app[event_clz]:
             # 2. 在总线上找到距离模糊时间戳最近时间戳
             pre_pos = np.searchsorted(mains[:, 0], stamp_over_app)
@@ -46,35 +44,37 @@ def annotate(set_name: str, house_id: str, app_abb: str, search_length: int = 30
                 continue
             # 3. 在总线上寻找最近时间戳
             search_range = np.arange(pre_pos - search_length, pre_pos + search_length)
-            amps = np.array([mains[idx + size, 1] - mains[idx, 1] for idx in search_range])
+            amps = np.array([mains[idx+(size+1)//2, 1]-mains[idx-size//2, 1] for idx in search_range])
             if event_clz == "1":
                 candidate_poses = search_range[np.nonzero(amps > thresh)[0]]
             else:
                 candidate_poses = search_range[np.nonzero(amps < -thresh)[0]]
-            # 重叠的多个事件仅保留第一个
-            candidate_poses = candidate_poses[np.diff(candidate_poses, prepend=float("-inf")) > size]
             if len(candidate_poses) > 0:
-                n_type1 += 1
+                # 重叠的多个事件仅保留中间的 
+                breaks = np.nonzero(np.diff(candidate_poses) > size)[0]
+                segments = np.split(candidate_poses, breaks + 1)
+                candidate_poses = [seg[np.argmin([abs(mains[idx+(size+1)//2, 1]-mains[idx+(size+1)//2+1, 1])+abs(mains[idx-size//2, 1]-mains[idx-size//2-1, 1]) for idx in seg])] for seg in segments]
+                n_matched += 1
                 offests = np.abs(mains[candidate_poses, 0] - stamp_over_app)
                 stamp = mains[candidate_poses[np.argmin(offests)], 0]
-                type_ = 1
+                is_match = 1
             else:
                 # 记录最近时间戳并标记为“未匹配”
-                n_type2 += 1
+                n_unmatched += 1
                 stamp = pre_stamp
-                type_ = 2
+                is_match = 2
 
             precision = 1 if set_name == "ukdale" else 0
             stamp = f"{stamp:.{precision}f}"
             stamp_over_app = f"{stamp_over_app:.0f}"
-            record = np.array([stamp, event_clz, type_, stamp_over_app], dtype=str)
+            record = np.array([stamp, event_clz, is_match, stamp_over_app], dtype=str)
             records = np.concatenate([records, record[None, :]])
     # sort the records on stamps and save records
     records = records[np.argsort(records[:, 0])]
     save_dir = Path("PEAN") / set_name / f'house_{house_id}' # Precise Event Annotation of NILM 
     save_dir.mkdir(parents=True, exist_ok=True)
     np.savetxt(save_dir / f"{app_abb}.csv", records, fmt="%s")
-    return n_type1, n_type2
+    return n_matched, n_unmatched
 
 def get_stamps_over_load(apps, thresh, min_on: int = 2, min_off: int = 2):
     """ 通过阈值检测电器的开启/关闭事件的所有时间戳。 """
@@ -103,8 +103,8 @@ if __name__ == "__main__":
     sum_type1, sum_type2 = 0, 0
     for house_id in (1, 2, 5):
         for app_abb in "kmdwf":
-            n_type1, n_type2 = annotate("ukdale", house_id, app_abb)
-            sum_type1 += n_type1
-            sum_type2 += n_type2
-            print(n_type1, n_type2, n_type2 / (n_type1 + n_type2))
+            n_matched, n_unmatched = annotate("ukdale", house_id, app_abb)
+            sum_type1 += n_matched
+            sum_type2 += n_unmatched
+            print(house_id, app_abb, n_matched, n_unmatched, n_unmatched / (n_matched + n_unmatched))
     print(sum_type1, sum_type2, sum_type2 / (sum_type1 + sum_type2))

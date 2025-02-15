@@ -27,13 +27,13 @@ def ann2seq(poses, clzes, device):
 
 def seq2ann(seqs):
     """ 基于序列标签生成事件标注 """
-        poses, clzes = [], []
-        for batch_idx, w_seq in enumerate(seqs):
-            w_poses = torch.nonzero(w_seq)[:, 0]
-            w_clzes = w_seq[w_poses]
-            poses.append(w_poses)
-            clzes.append(w_clzes)
-        return poses, clzes
+    poses, clzes = [], []
+    for batch_idx, w_seq in enumerate(seqs):
+        w_poses = torch.nonzero(w_seq)[:, 0]
+        w_clzes = w_seq[w_poses]
+        poses.append(w_poses)
+        clzes.append(w_clzes)
+    return poses, clzes
 
 class BottleNeck(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -78,7 +78,7 @@ class PositionEmbeddingSine(nn.Module):
 
 
 
-class Sl(nn.Module):
+class SlNet(nn.Module):
     def __init__(self, in_channels=1, out_channels=512, n_class=2):
         super().__init__()
         self.cnn = BottleNeck(in_channels, out_channels)

@@ -9,6 +9,7 @@ email: lily231147@gmail.com
 import hashlib
 from pathlib import Path
 import random
+import re
 import tempfile
 
 import numpy as np
@@ -27,15 +28,16 @@ from torch.utils.data import Dataset
 random.seed(42)
 
 # 全局变量
-DIR = Path('/root/autodl-tmp/nilm_lf')
+# DIR = Path('/root/autodl-tmp/nilm_lf')
+DIR = Path('C://Users//21975//Downloads//nilm_lf')
 ids = {"k": 0, "m": 1, "d": 2, "w": 3, "f": 4}
 # threshs ={"k": 2000, "m": 200, "d": 10, "w": 20, "f": 50} 主要是w的阈值差异 1200是我个人设定的
-threshs = {"k": 2000, "m": 200, "d": 20, "w": 1200, "f": 50}
+threshs = {"k": 2000, "m": 1200, "d": 1200, "w": 1200, "f": 50}
 ceils = {"k": 3100, "m": 3000, "d": 2500, "w": 2500, "f": 300}
 sizes = {
-    '1': {'k': (2, 2), 'm': (5, 2), 'd': (2, 2), 'w': (3, 3), 'f': (3, 2)},
-    '2': {'k': (2, 2), 'm': (4, 2), 'd': (2, 2), 'w': (2, 2), 'f': (4, 2)},
-    '5': {'k': (2, 2), 'm': (6, 2), 'd': (2, 2), 'w': (2, 2), 'f': (4, 2)}
+    1: {'k': (2, 2), 'm': (5, 2), 'd': (2, 2), 'w': (3, 3), 'f': (3, 2)},
+    2: {'k': (2, 2), 'm': (4, 2), 'd': (2, 2), 'w': (2, 2), 'f': (4, 2)},
+    5: {'k': (2, 2), 'm': (6, 2), 'd': (2, 2), 'w': (2, 2), 'f': (4, 2)}
 }
 names = ['kettle', 'microwave', 'dishwasher', 'washing_machine', 'fridge']
 
@@ -87,7 +89,7 @@ def load_data(set_name, house_ids, app_abb, stage):
         if stage == 'fit' and set_name == 'ukdale' and house_id == 1: mains = mains[0: int(0.15 * len(mains))]
         # 只考虑匹配事件
         anns = anns[anns[:, 2] == 1]
-        for win in np.lib.stride_tricks.sliding_window_view(mains, (WINDOW_LENGTH, 2))[:, 0][::WINDOW_STRIDE]:
+        for win in np.lib.stride_tricks.sliding_window_view(mains, (WINDOW_SIZE, 2))[:, 0][::WINDOW_STRIDE]:
             # 获得每个窗口对应的标签
             win_anns = anns[(anns[:, 0] >= win[0, 0]) & (anns[:, 0] <= win[-1, 0])]
             stamps_list.append(stamps:=win[:, 0])

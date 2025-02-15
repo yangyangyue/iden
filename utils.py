@@ -21,7 +21,7 @@ from pathlib import Path
 """
 
 
-def box_iou(boxes1, boxes2):
+def iou(boxes1, boxes2):
     area1 = boxes1[:, 1] - boxes1[:, 0]
     area2 = boxes2[:, 1] - boxes2[:, 0]
     lt = torch.max(boxes1[:, None, 0], boxes2[:, 0])  # left-top [N,M,2]
