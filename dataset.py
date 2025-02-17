@@ -28,8 +28,8 @@ from torch.utils.data import Dataset
 random.seed(42)
 
 # 全局变量
-# DIR = Path('/root/autodl-tmp/nilm_lf')
-DIR = Path('C://Users//21975//Downloads//nilm_lf')
+DIR = Path('/root/autodl-tmp/nilm_lf')
+# DIR = Path('C://Users//21975//Downloads//nilm_lf')
 ids = {"k": 0, "m": 1, "d": 2, "w": 3, "f": 4}
 # threshs ={"k": 2000, "m": 200, "d": 10, "w": 20, "f": 50} 主要是w的阈值差异 1200是我个人设定的
 threshs = {"k": 2000, "m": 1200, "d": 1200, "w": 1200, "f": 50}
@@ -42,7 +42,7 @@ sizes = {
 names = ['kettle', 'microwave', 'dishwasher', 'washing_machine', 'fridge']
 
 WINDOW_SIZE = 1024
-WINDOW_STRIDE = 512
+WINDOW_STRIDE = 1024
 
 # 不考虑refit，因为其采样率是1/8s
 ukdale_channels = {
@@ -79,14 +79,14 @@ def read(set_name, house_id, app_abb=None, channel=None):
         np.save(temp_path, powers)
     return powers
 
-def load_data(set_name, house_ids, app_abb, stage):
+def load_data(mains_dict, set_name, house_ids, app_abb, stage):
     """ 加载指定房屋的数据，包括总线、时间戳、事件位置和类别 """
     stamps_list, powers_list, poses_list, clzes_list = [], [], [], []
     for house_id in house_ids:
-        mains = read(set_name, house_id)
-        anns = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}.csv")
+        mains = mains_dict[house_id]
         # ukdale 1 在训练时只取前0.15的数据 否则太耗时了
         if stage == 'fit' and set_name == 'ukdale' and house_id == 1: mains = mains[0: int(0.15 * len(mains))]
+        anns = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}.csv")
         # 只考虑匹配事件
         anns = anns[anns[:, 2] == 1]
         for win in np.lib.stride_tricks.sliding_window_view(mains, (WINDOW_SIZE, 2))[:, 0][::WINDOW_STRIDE]:
@@ -134,7 +134,8 @@ class ApplianceDataset(Dataset):
 
 def get_sets(set_houses, stage):
     """ 获取多个房屋中各电器的数据集 """
-    datasets = [[], [], [], [], []]
     match = re.match(r'^(\D+)(\d+)$', set_houses)
     set_name, house_ids = match.groups()
-    return [ApplianceDataset(app_abb, *load_data(set_name, house_ids, app_abb, stage), stage) for app_abb in "kmdwf"]
+    # 防止重复加载
+    mains_dict = {house_id: read(set_name, house_id) for house_id in house_ids}
+    return [ApplianceDataset(app_abb, *load_data(mains_dict, set_name, house_ids, app_abb, stage), stage) for app_abb in "kmdwf"]

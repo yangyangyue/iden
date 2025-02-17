@@ -28,6 +28,11 @@ def annotate(set_name, house_id, app_abb, search_length = 30):
     begin = np.searchsorted(apps[:, 0], mains[0, 0])
     end = np.searchsorted(apps[:, 0], mains[-1, 0])
     apps = apps[begin:end]
+    # 记录支线断裂带，并只取断裂带以外的总线部分
+    break_ids = np.where(np.diff(apps[:, 0]) > 60)[0] 
+    breaks = np.array([(apps[i, 0], apps[i+1, 0]) for i in break_ids])
+    mains = np.array([sample for sample in mains if not any(start <= sample[0] <= end for start, end in breaks)])
+    
     records = np.zeros((0, 4), dtype=str)
     n_matched, n_unmatched = 0, 0
     # 1. 基于支线获得模糊时间戳
@@ -71,9 +76,10 @@ def annotate(set_name, house_id, app_abb, search_length = 30):
             records = np.concatenate([records, record[None, :]])
     # sort the records on stamps and save records
     records = records[np.argsort(records[:, 0])]
-    save_dir = Path("PEAN") / set_name / f'house_{house_id}' # Precise Event Annotation of NILM 
+    save_dir = Path("PEAN") / set_name / f'house_{house_id}'
     save_dir.mkdir(parents=True, exist_ok=True)
     np.savetxt(save_dir / f"{app_abb}.csv", records, fmt="%s")
+    np.savetxt(save_dir / f"{app_abb}-breaks.csv", breaks)
     return n_matched, n_unmatched
 
 def get_stamps_over_load(apps, thresh, min_on: int = 2, min_off: int = 2):

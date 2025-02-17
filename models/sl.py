@@ -3,6 +3,7 @@ sys.path.append('..')
 from dataset import WINDOW_SIZE
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 """
 用序列标注的方式识别事件
@@ -25,14 +26,20 @@ def ann2seq(poses, clzes, device):
             seq[batch_idx, int(pos)] = clz
     return seq
 
-def seq2ann(seqs):
+def seq2ann(seqs, scores, thresh=6):
     """ 基于序列标签生成事件标注 """
     poses, clzes = [], []
-    for batch_idx, w_seq in enumerate(seqs):
+    for w_seq, w_scores in zip(seqs, scores):
         w_poses = torch.nonzero(w_seq)[:, 0]
-        w_clzes = w_seq[w_poses]
-        poses.append(w_poses)
-        clzes.append(w_clzes)
+        w_clzes, w_scores = w_seq[w_poses], w_scores[w_poses]
+        sorted_ids = torch.argsort(w_scores, descending=True)
+        w_poses, w_clzes, w_scores = w_poses[sorted_ids], w_clzes[sorted_ids], w_scores[sorted_ids]
+        keep = []
+        for i, pos in enumerate(w_poses):
+            if all(abs(pos - w_poses[k]) > thresh for k in keep):
+                keep.append(i)
+        poses.append(w_poses[keep])
+        clzes.append(w_clzes[keep])
     return poses, clzes
 
 class BottleNeck(nn.Module):
@@ -77,20 +84,19 @@ class PositionEmbeddingSine(nn.Module):
         return self.dropout(x + self.pe.to(x.device))  # 位置编码 + 输入特征
 
 
-
 class SlNet(nn.Module):
     def __init__(self, in_channels=1, out_channels=512, n_class=2):
         super().__init__()
         self.cnn = BottleNeck(in_channels, out_channels)
-        self.embedding = PositionEmbeddingSine(out_channels, WINDOW_SIZE)
+        self.embedding = PositionEmbeddingSine(out_channels)
         layer = nn.TransformerEncoderLayer(d_model=out_channels, nhead=8, dim_feedforward=800, batch_first=True)
         self.transformer = nn.TransformerEncoder(layer, 2)
         self.out = nn.Conv1d(out_channels, 1 + n_class, kernel_size=3, stride=1, padding=1)
-        self.cce = nn.CrossEntropyLoss(weight=torch.Tensor([0.0001] + [1 for _ in range(n_class)]))
+        self.cce = nn.CrossEntropyLoss()
 
     def forward(self, ids, stamps, aggs, poses, clzes):
         features = self.cnn(aggs[:, None, :]) # (bs, out_channels, L)
-        features = self.transformer(self.embedding(features).permute(0, 2, 1)).permute(0, 2, 1) # (bs, out_channels, L)
+        features = self.transformer(self.embedding(features.permute(0, 2, 1))).permute(0, 2, 1) # (bs, out_channels, L)
         logits = self.out(features)  # (bs, 1+n_class, L)
-        return self.cce(logits, ann2seq(poses, clzes, aggs.device, WINDOW_SIZE)) if self.training else seq2ann(torch.argmax(logits, dim=1))
+        return self.cce(logits, ann2seq(poses, clzes, aggs.device)) if self.training else seq2ann(torch.argmax(logits, dim=1), F.softmax(logits, dim=1).max(dim=1).values)
 
