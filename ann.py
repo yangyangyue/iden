@@ -22,6 +22,8 @@ def annotate(set_name, house_id, app_abb, search_length = 30):
         负载信号上存在事件 但主线上未找到 这可能是由于事件重叠、负载信号与主线之间存在较大偏移或采集问题造成的。这些事件的类型被指定为1。
         在主线上匹配了错误的事件。
     """
+    save_dir = Path("PEAN") / set_name / f'house_{house_id}'
+    save_dir.mkdir(parents=True, exist_ok=True)
     # 读取总线和支线，同时截取处于总线范围内的支线
     mains = read(set_name, house_id)
     apps = read(set_name, house_id, app_abb)
@@ -31,7 +33,11 @@ def annotate(set_name, house_id, app_abb, search_length = 30):
     # 记录支线断裂带，并只取断裂带以外的总线部分
     break_ids = np.where(np.diff(apps[:, 0]) > 60)[0] 
     breaks = np.array([(apps[i, 0], apps[i+1, 0]) for i in break_ids])
-    mains = np.array([sample for sample in mains if not any(start <= sample[0] <= end for start, end in breaks)])
+    valid = np.stack([np.concatenate(([apps[0, 0]], breaks[:, 1])), np.concatenate((breaks[:, 0], [apps[-1, 0]]))], axis=1)
+    start_idx = np.searchsorted(valid[:, 0], mains[:, 0], side='right') - 1
+    end_idx = np.searchsorted(valid[:, 1], mains[:, 0], side='right')
+    mains = mains[np.where(start_idx == end_idx)[0]]
+    np.savetxt(save_dir / f"{app_abb}-valid.csv", valid)
     
     records = np.zeros((0, 4), dtype=str)
     n_matched, n_unmatched = 0, 0
@@ -76,10 +82,8 @@ def annotate(set_name, house_id, app_abb, search_length = 30):
             records = np.concatenate([records, record[None, :]])
     # sort the records on stamps and save records
     records = records[np.argsort(records[:, 0])]
-    save_dir = Path("PEAN") / set_name / f'house_{house_id}'
-    save_dir.mkdir(parents=True, exist_ok=True)
     np.savetxt(save_dir / f"{app_abb}.csv", records, fmt="%s")
-    np.savetxt(save_dir / f"{app_abb}-breaks.csv", breaks)
+    # np.savetxt(save_dir / f"{app_abb}-breaks.csv", breaks)
     return n_matched, n_unmatched
 
 def get_stamps_over_load(apps, thresh, min_on: int = 2, min_off: int = 2):
