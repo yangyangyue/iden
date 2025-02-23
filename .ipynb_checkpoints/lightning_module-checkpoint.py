@@ -14,6 +14,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from models.sl import SlNet
+from models.detr import DetrNet
 
 class NilmNet(L.LightningModule):
     """
@@ -27,6 +28,8 @@ class NilmNet(L.LightningModule):
         self.save_path = save_path
         if method == 'sl':
             self.model = SlNet()
+        elif method == 'detr':
+            self.model = DetrNet()
         self.tp, self.fp, self.fn = 0, 0, 0
         self.losses = []
         self.pred_stamps, self.pred_clzes = [], []
@@ -53,7 +56,7 @@ class NilmNet(L.LightningModule):
         poses = [p.to(aggs.device) for p in poses]
         clzes = [c.to(aggs.device) for c in clzes]
         pred_poses, pred_clzes = self(ids, stamps, aggs)
-        self.cal_metrics(poses, clzes, pred_poses, pred_clzes)
+        self.cal_metrics(poses, clzes, pred_poses, pred_clzes, stamps)
     
     def on_validation_epoch_end(self):
         pre = self.tp / (self.tp + self.fp) if self.tp + self.fp > 0 else 0
@@ -80,12 +83,12 @@ class NilmNet(L.LightningModule):
         self.log('pre', pre, on_epoch=True, prog_bar=True, logger=True)
         self.log('rec', rec, on_epoch=True, prog_bar=True, logger=True)
         self.log('f1', f1, on_epoch=True, prog_bar=True, logger=True)
-        self.tp, self.fp, self.fn = 0, 0, 0
-        self.print2file('pre', pre, 'rec', rec, 'f1', f1)
+        self.print2file('pre', pre, 'rec', rec, 'f1', f1, 'tp', self.tp, 'fp', self.fp, 'fn', self.fn)
         res = np.stack([np.concatenate(self.pred_stamps), np.concatenate(self.pred_clzes)], axis=1)
         np.savetxt(self.save_path, res[res[:, 0].argsort()])
         np.savetxt(str(self.save_path)+"-predf", np.concatenate(self.pred_fatals))
         np.savetxt(str(self.save_path)+"-gtf", np.concatenate(self.gt_fatals))
+        self.tp, self.fp, self.fn = 0, 0, 0
         self.pred_stamps.clear()
         self.pred_clzes.clear()
         self.pred_fatals.clear()
@@ -93,7 +96,7 @@ class NilmNet(L.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters())
-        scheduler = StepLR(optimizer, step_size=20, gamma=0.5)
+        scheduler = StepLR(optimizer, step_size=10, gamma=0.8)
         return [optimizer], [scheduler]
 
     def print2file(self, *args):

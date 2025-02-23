@@ -28,8 +28,8 @@ from torch.utils.data import Dataset
 random.seed(42)
 
 # 全局变量
-# DIR = Path('/root/autodl-tmp/nilm_lf')
-DIR = Path('C://Users//21975//Downloads//nilm_lf')
+DIR = Path('/root/autodl-tmp/nilm_lf')
+# DIR = Path('C://Users//21975//Downloads//nilm_lf')
 ids = {"k": 0, "m": 1, "d": 2, "w": 3, "f": 4}
 # threshs ={"k": 2000, "m": 200, "d": 10, "w": 20, "f": 50} 主要是w的阈值差异 1200是我个人设定的
 threshs = {"k": 2000, "m": 1200, "d": 1200, "w": 1200, "f": 50}
@@ -81,13 +81,13 @@ def read(set_name, house_id, app_abb=None, channel=None):
 
 def load_data(mains_dict, set_name, house_ids, app_abb, stage):
     """ 加载指定房屋的数据，包括总线、时间戳、事件位置和类别 """
-    valid = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}-valid.csv")
-    start_idx = np.searchsorted(valid[:, 0], mains[:, 0], side='right') - 1
-    end_idx = np.searchsorted(valid[:, 1], mains[:, 0], side='right')
-    mains = mains[np.where(start_idx == end_idx)[0]]
     stamps_list, powers_list, poses_list, clzes_list = [], [], [], []
     for house_id in house_ids:
         mains = mains_dict[house_id]
+        valid = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}-valid.csv")
+        start_idx = np.searchsorted(valid[:, 0], mains[:, 0], side='right') - 1
+        end_idx = np.searchsorted(valid[:, 1], mains[:, 0], side='right')
+        mains = mains[np.where(start_idx == end_idx)[0]]
         # ukdale 1 在训练时只取前0.15的数据 否则太耗时了
         if stage == 'fit' and set_name == 'ukdale' and house_id == 1: mains = mains[0: int(0.15 * len(mains))]
         anns = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}.csv")
@@ -125,11 +125,14 @@ class ApplianceDataset(Dataset):
         samples = np.array([len(clzes) > 0 for clzes in self.clzes_list])
         n_pos = np.sum(samples)
         n_neg = len(samples) - n_pos
-        if n_pos / pos_neg_ratio >= n_neg: return
+        if self.app_abb != 'f' and n_pos / pos_neg_ratio >= n_neg: return
         n_neg = int(n_pos / pos_neg_ratio)
         pos_ids = np.nonzero(samples)[0]
         neg_ids = np.nonzero(samples == False)[0]
         neg_ids = neg_ids[np.random.permutation(len(neg_ids))[:n_neg]]
+        if self.app_abb == 'f':
+            # fridge训练样本太多了，耗时太长
+            pos_ids = pos_ids[np.random.permutation(len(pos_ids))[:len(pos_ids)//10]]
         keep_ids = np.sort(np.concatenate([pos_ids, neg_ids]))
         self.stamps_list = [self.stamps_list[idx] for idx in keep_ids]
         self.powers_list = [self.powers_list[idx] for idx in keep_ids]

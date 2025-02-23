@@ -64,39 +64,24 @@ class BottleNeck(nn.Module):
         return x.relu()
 
 
-class PositionEmbeddingSine(nn.Module):
-    def __init__(self, channels, dropout=0.1):
-        super().__init__()
-        assert channels % 2 == 0, "位置编码通道数必须是偶数"
-
-        self.channels = channels
-        self.dropout = nn.Dropout(p=dropout)
-
-        # 生成位置编码
-        pe = torch.zeros(WINDOW_SIZE, self.channels)  # (L, D)
-        position = torch.arange(0, WINDOW_SIZE, dtype=torch.float32).unsqueeze(1)  # (L, 1)
-        div_term = torch.pow(10000, torch.arange(0, self.channels, 2).float() / self.channels)  # (D//2,)
-        pe[:, 0::2] = torch.sin(position / div_term)  # 偶数维度
-        pe[:, 1::2] = torch.cos(position / div_term)  # 奇数维度
-        self.register_buffer("pe", pe) 
-
-    def forward(self, x):
-        return self.dropout(x + self.pe.to(x.device))  # 位置编码 + 输入特征
-
-
 class SlNet(nn.Module):
-    def __init__(self, in_channels=1, out_channels=512, n_class=2):
+    def __init__(self, in_channels=1, out_channels=256, n_class=2):
         super().__init__()
-        self.cnn = BottleNeck(in_channels, out_channels)
-        self.embedding = PositionEmbeddingSine(out_channels)
-        layer = nn.TransformerEncoderLayer(d_model=out_channels, nhead=8, dim_feedforward=800, batch_first=True)
-        self.transformer = nn.TransformerEncoder(layer, 2)
+        self.cnn = nn.BottleNeck(
+            BottleNeck(in_channels, out_channels),
+            BottleNeck(out_channels, out_channels),
+            BottleNeck(out_channels, out_channels),
+            BottleNeck(out_channels, out_channels),
+        )
+        self.pos_embed = nn.Parameter(torch.randn(WINDOW_SIZE, out_channels))
+        layer = nn.TransformerEncoderLayer(d_model=out_channels, nhead=2, dim_feedforward=512, batch_first=True)
+        self.transformer = nn.TransformerEncoder(layer, 1)
         self.out = nn.Conv1d(out_channels, 1 + n_class, kernel_size=3, stride=1, padding=1)
         self.cce = nn.CrossEntropyLoss()
 
     def forward(self, ids, stamps, aggs, poses, clzes):
-        features = self.cnn(aggs[:, None, :]) # (bs, out_channels, L)
-        features = self.transformer(self.embedding(features.permute(0, 2, 1))).permute(0, 2, 1) # (bs, out_channels, L)
+        features = self.cnn(aggs[:, None, :]).permute(0, 2, 1) # (bs, L， out_channels)
+        features = self.transformer(features+self.pos_embed).permute(0, 2, 1) # (bs, out_channels, L)
         logits = self.out(features)  # (bs, 1+n_class, L)
         return self.cce(logits, ann2seq(poses, clzes, aggs.device)) if self.training else seq2ann(torch.argmax(logits, dim=1), F.softmax(logits, dim=1).max(dim=1).values)
 

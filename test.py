@@ -30,7 +30,7 @@ def test(method, test_house, fit_houses):
         model = NilmNet.load_from_checkpoint(ckpt_files[-1], method=method, save_path=save_path)
         trainer = pl.Trainer(devices="auto", accelerator="auto")
         trainer.test(model, datamodule=datamodule, verbose=False)
-        break
+        # break
 
 if __name__ == "__main__":
     # args

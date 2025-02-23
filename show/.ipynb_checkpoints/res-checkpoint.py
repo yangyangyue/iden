@@ -19,6 +19,10 @@ mains = read("ukdale", house_id)
 apps = read("ukdale", house_id, 'k')
 
 for app_abb in 'kmdwf':
+    valid = np.loadtxt(Path("..") / 'PEAN' / 'ukdale' / f'house_{house_id}' / f"{app_abb}-valid.csv")
+    start_idx = np.searchsorted(valid[:, 0], mains[:, 0], side='right') - 1
+    end_idx = np.searchsorted(valid[:, 1], mains[:, 0], side='right')
+    mains = mains[np.where(start_idx == end_idx)[0]]
     # path = Path("..") / "PEAN" / "ukdale" / f"house_{house_id}" / f"{app_abb}.csv"
     pred_anns = np.loadtxt(f'sl-ukdale15-ukdale2-{app_abb}.csv')
     gt_anns = np.loadtxt(Path("..") / 'PEAN' / 'ukdale' / f'house_{house_id}' / f"{app_abb}.csv")
@@ -26,8 +30,8 @@ for app_abb in 'kmdwf':
     predf = np.loadtxt(f'sl-ukdale15-ukdale2-{app_abb}.csv-predf')
     gtf = np.loadtxt(f'sl-ukdale15-ukdale2-{app_abb}.csv-gtf')
     pred_ids = [np.nonzero(mains[:,0] == item[0])[0][0] for item in pred_anns]
-    plt.plot(mains[:, 0], mains[:, 1])
-    plt.plot(apps[:, 0], apps[:, 1])
+    plt.plot(mains[:, 1])
+    # plt.plot(apps[:, 0], apps[:, 1])
     for i, idx in enumerate(pred_ids):
         size = sizes[house_id][app_abb][0 if pred_anns[i, 1] == 1 else 1]
         if mains[idx, 0] in predf:

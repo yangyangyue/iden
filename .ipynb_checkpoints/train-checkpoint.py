@@ -46,8 +46,8 @@ def train(method, fithouses):
         datamodule = NilmDataModule(train_set=train_set, val_set=val_set, bs=256)
         model = NilmNet(method)
         checkpoint_callback = ModelCheckpoint(dirpath='checkpoints/', filename=f'{method}-{fithouses}-{app_abb}', monitor="f1")
-        early_stop_callback = EarlyStopping(monitor="f1", mode="max", patience=20)
-        trainer = pl.Trainer(devices="auto", accelerator="auto", max_epochs=80, callbacks=[checkpoint_callback, early_stop_callback], log_every_n_steps=10)
+        early_stop_callback = EarlyStopping(monitor="f1", mode="max", patience=10)
+        trainer = pl.Trainer(devices="auto", accelerator="auto", max_epochs=30, callbacks=[checkpoint_callback, early_stop_callback], log_every_n_steps=10, num_sanity_val_steps=0)
         trainer.fit(model, datamodule=datamodule)
 
 if __name__ == "__main__":

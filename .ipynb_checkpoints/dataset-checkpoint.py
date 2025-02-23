@@ -84,6 +84,10 @@ def load_data(mains_dict, set_name, house_ids, app_abb, stage):
     stamps_list, powers_list, poses_list, clzes_list = [], [], [], []
     for house_id in house_ids:
         mains = mains_dict[house_id]
+        valid = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}-valid.csv")
+        start_idx = np.searchsorted(valid[:, 0], mains[:, 0], side='right') - 1
+        end_idx = np.searchsorted(valid[:, 1], mains[:, 0], side='right')
+        mains = mains[np.where(start_idx == end_idx)[0]]
         # ukdale 1 在训练时只取前0.15的数据 否则太耗时了
         if stage == 'fit' and set_name == 'ukdale' and house_id == 1: mains = mains[0: int(0.15 * len(mains))]
         anns = np.loadtxt(Path("PEAN") / set_name / f'house_{house_id}' / f"{app_abb}.csv")
@@ -121,11 +125,14 @@ class ApplianceDataset(Dataset):
         samples = np.array([len(clzes) > 0 for clzes in self.clzes_list])
         n_pos = np.sum(samples)
         n_neg = len(samples) - n_pos
-        if n_pos / pos_neg_ratio >= n_neg: return
+        if self.app_abb != 'f' and n_pos / pos_neg_ratio >= n_neg: return
         n_neg = int(n_pos / pos_neg_ratio)
         pos_ids = np.nonzero(samples)[0]
         neg_ids = np.nonzero(samples == False)[0]
         neg_ids = neg_ids[np.random.permutation(len(neg_ids))[:n_neg]]
+        if self.app_abb == 'f':
+            # fridge训练样本太多了，耗时太长
+            pos_ids = pos_ids[np.random.permutation(len(pos_ids))[:len(pos_ids)//10]]
         keep_ids = np.sort(np.concatenate([pos_ids, neg_ids]))
         self.stamps_list = [self.stamps_list[idx] for idx in keep_ids]
         self.powers_list = [self.powers_list[idx] for idx in keep_ids]
